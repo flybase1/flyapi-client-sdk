@@ -31,7 +31,7 @@ public class FlyapiGatewayApplication {
         String result2 = application.doSayHello2("world");
         System.out.println("result: " + result);
         System.out.println("result: " + result2);
-        SpringApplication.run(FlyapiGatewayApplication.class, args);
+
     }
 
     public String doSayHello(String name) {

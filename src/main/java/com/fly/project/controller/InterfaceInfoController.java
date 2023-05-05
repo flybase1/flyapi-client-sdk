@@ -3,6 +3,7 @@ package com.fly.project.controller;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fly.flyapiclientsdk.client.FlyApiClient;
+import com.fly.flyapiclientsdk.model.Query.PictureRequest;
 import com.fly.flyapicommon.model.entity.InterfaceInfo;
 import com.fly.flyapicommon.model.entity.User;
 import com.fly.project.model.dto.interfaceinfo.InterfaceInfoInvokeRequest;
@@ -277,6 +278,7 @@ public class InterfaceInfoController {
         return ResultUtils.success(result);
     }
 
+    // 47.113.144.50
     public static final String HOST_INTERFACE = "http://localhost:8123/api";
 
     /**
@@ -314,19 +316,33 @@ public class InterfaceInfoController {
         FlyApiClient temp = new FlyApiClient(accessKey, secretKey);
         String res = null;
 
-        if (oldInfo.getUrl().equals(HOST_INTERFACE + "/story/getStory")) {
-            try {
-                res = temp.getFunnyStory();
-            } catch (UnsupportedEncodingException e) {
-                e.printStackTrace();
+        switch (oldInfo.getUrl()) {
+            case HOST_INTERFACE + "/story/getStory":
+                try {
+                    res = temp.getFunnyStory();
+                } catch (UnsupportedEncodingException e) {
+                    throw new BusinessException(ErrorCode.SYSTEM_ERROR, "请求错误");
+                }
+                break;
+            case HOST_INTERFACE + "/name/user": {
+                Gson gson = new Gson();
+                com.fly.flyapiclientsdk.model.User user = gson.fromJson(userRequestParams, com.fly.flyapiclientsdk.model.User.class);
+                try {
+                    res = temp.getNameByPostWithJson(user);
+                } catch (UnsupportedEncodingException e) {
+                    throw new BusinessException(ErrorCode.SYSTEM_ERROR, "请求错误");
+                }
+                break;
             }
-        } else if (oldInfo.getUrl().equals(HOST_INTERFACE + "/name/user")) {
-            Gson gson = new Gson();
-            com.fly.flyapiclientsdk.model.User user = gson.fromJson(userRequestParams, com.fly.flyapiclientsdk.model.User.class);
-            try {
-                res = temp.getNameByPostWithJson(user);
-            } catch (UnsupportedEncodingException e) {
-                e.printStackTrace();
+            case HOST_INTERFACE + "/picture/getPicture": {
+                Gson gson = new Gson();
+                PictureRequest pictureRequest = gson.fromJson(userRequestParams, PictureRequest.class);
+                try {
+                    res = temp.getPicture(pictureRequest);
+                } catch (Exception e) {
+                    throw new BusinessException(ErrorCode.SYSTEM_ERROR, "请求错误");
+                }
+                break;
             }
         }
         return ResultUtils.success(res);

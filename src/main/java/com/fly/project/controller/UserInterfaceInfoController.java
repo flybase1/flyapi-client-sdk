@@ -20,14 +20,19 @@ import com.fly.project.model.dto.UserInterfaceInfo.UserInterfaceInfoUpdateReques
 import com.fly.project.model.dto.user.UserIdQuery;
 import com.fly.project.service.UserService;
 import com.fly.project.service.impl.UserInterfaceInfoServiceImpl;
+import com.fly.project.utils.RedisConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 帖子接口
@@ -45,6 +50,8 @@ public class UserInterfaceInfoController {
     @Resource
     private UserService userService;
 
+    @Resource
+    private RedisTemplate<String, Object> redisTemplate;
 
     /**
      * 创建
@@ -182,8 +189,9 @@ public class UserInterfaceInfoController {
         if (userInterfaceInfoQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        UserInterfaceInfo UserInterfaceInfoQuery = new UserInterfaceInfo();
-        BeanUtils.copyProperties(userInterfaceInfoQueryRequest, UserInterfaceInfoQuery);
+        UserInterfaceInfo userInterfaceInfoQuery = new UserInterfaceInfo();
+
+        BeanUtils.copyProperties(userInterfaceInfoQueryRequest, userInterfaceInfoQuery);
         long current = userInterfaceInfoQueryRequest.getCurrent();
         long size = userInterfaceInfoQueryRequest.getPageSize();
         String sortField = userInterfaceInfoQueryRequest.getSortField();
@@ -192,14 +200,23 @@ public class UserInterfaceInfoController {
         if (size > 50) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        QueryWrapper<UserInterfaceInfo> queryWrapper = new QueryWrapper<>(UserInterfaceInfoQuery);
+
+        //todo 无缓存，直接走数据库查询
+        QueryWrapper<UserInterfaceInfo> queryWrapper = new QueryWrapper<>(userInterfaceInfoQuery);
         queryWrapper.orderBy(StringUtils.isNotBlank(sortField),
                 sortOrder.equals(CommonConstant.SORT_ORDER_ASC), sortField);
         queryWrapper.orderByDesc("id");
-        Page<UserInterfaceInfo> UserInterfaceInfoPage = userInterfaceInfoService.page(new Page<>(current, size), queryWrapper);
-        return ResultUtils.success(UserInterfaceInfoPage);
+        Page<UserInterfaceInfo> interfaceInfoPage = userInterfaceInfoService.page(new Page<>(current, size), queryWrapper);
+
+        return ResultUtils.success(interfaceInfoPage);
     }
 
+    /**
+     * 返回用户调用剩余次数
+     * @param interfaceInfoIdAndUserIdQuery
+     * @param request
+     * @return
+     */
     @GetMapping( "/leftCount" )
     public BaseResponse<Integer> getUserIntegerCount(InterfaceInfoIdAndUserIdQuery interfaceInfoIdAndUserIdQuery, HttpServletRequest request) {
         if (interfaceInfoIdAndUserIdQuery == null) {
@@ -210,5 +227,17 @@ public class UserInterfaceInfoController {
         Integer userIntegerCount = userInterfaceInfoService.getUserIntegerCount(interfaceInfoId, userId);
         return ResultUtils.success(userIntegerCount);
     }
+
+    /**
+     * 获取所有接口调用次数总和
+     * @param request
+     * @return
+     */
+    @GetMapping("/allInvokeCount")
+    public BaseResponse<BigDecimal> getAllInvokeCount( HttpServletRequest request) {
+        BigDecimal allInvokeCount = userInterfaceInfoService.getAllInvokeCount();
+        return ResultUtils.success(allInvokeCount);
+    }
+
 
 }

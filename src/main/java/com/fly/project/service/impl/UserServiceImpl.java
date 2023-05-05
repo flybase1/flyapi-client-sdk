@@ -12,6 +12,7 @@ import com.fly.project.exception.BusinessException;
 import com.fly.project.mapper.UserMapper;
 import com.fly.project.model.vo.UserVO;
 import com.fly.project.service.UserService;
+import io.swagger.models.auth.In;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
@@ -20,7 +21,9 @@ import org.springframework.util.DigestUtils;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.fly.project.constant.UserConstant.ADMIN_ROLE;
@@ -133,13 +136,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // todo 如何解决重复插入
         // 查询接口以及用户剩余次数，如果用户记录为空，就自动分配次数
         createMappingIfNotExists(user.getId());
-
+        createNonExistUserInterfaceInfo(user.getId());
         // 3. 记录用户的登录态
         request.getSession().setAttribute(USER_LOGIN_STATE, user);
         return user;
     }
 
-
+    /**
+     * 用户注册完，第一次登录的时候，给与分配次数，但是这样存在一个问题，如果之后开发新的接口，用户就没办法获取调用次数
+     * @param userId
+     */
     public void createMappingIfNotExists(Long userId) {
         QueryWrapper<UserInterfaceInfo> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("userId", userId);
@@ -160,6 +166,55 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
     }
 
+    /**
+     * 解决上面开发新接口用户次数的问题
+     * (1)先查询用户在user_interface的集合
+     * (2)再根据查询来的userId的集合查询相应接口集合
+     * (3)再查询所有的接口信息，查询用户里面不存在的接口的信息
+     * (4)设置相应参数
+     * @param userId
+     */
+    public void createNonExistUserInterfaceInfo(Long userId) {
+        // 查询 userInterfaceInfo 表中所有符合条件的记录
+        List<UserInterfaceInfo> uid = userInterfaceInfoService
+                .lambdaQuery()
+                .eq(UserInterfaceInfo::getUserId, userId)
+                .list();
+
+        // 根据 interfaceInfo 的 id 列表查询 uid 中存在的记录
+        List<Long> existIdList = uid
+                .stream()
+                .map(UserInterfaceInfo::getInterfaceInfoId)
+                .collect(Collectors.toList());
+
+
+        List<InterfaceInfo> interfaceInfoList = interfaceInfoService.list();
+        // 将 interfaceInfo 的 id 列表转换成 Set 类型
+        Set<Long> interfaceIdSet = interfaceInfoList
+                .stream()
+                .map(InterfaceInfo::getId)
+                .collect(Collectors.toSet());
+
+        // 将 existIdList 转换成 Set 类型
+        Set<Long> existIdSet = new HashSet<>(existIdList);
+        // 通过求差集的方式得到不存在在 userInterfaceInfo 表中的 interfaceInfo 的 id 列表
+        List<Long> nonExistIdList = interfaceIdSet
+                .stream()
+                .filter(id -> !existIdSet.contains(id))
+                .collect(Collectors.toList());
+
+        // 遍历 nonExistIdList 列表，为每一个 id 创建一条 UserInterfaceInfo 记录
+        List<UserInterfaceInfo> userInterfaceInfoList = nonExistIdList.stream().map(id -> {
+            UserInterfaceInfo userInterfaceInfo = new UserInterfaceInfo();
+            userInterfaceInfo.setInterfaceInfoId(id);
+            userInterfaceInfo.setUserId(userId);
+            userInterfaceInfo.setLeftNum(20);
+            userInterfaceInfo.setTotalNum(0);
+            return userInterfaceInfo;
+        }).collect(Collectors.toList());
+        // 将创建的所有 UserInterfaceInfo 记录批量保存到 userInterfaceInfo 表中
+        userInterfaceInfoService.saveBatch(userInterfaceInfoList);
+    }
     /**
      * 获取当前登录用户
      *

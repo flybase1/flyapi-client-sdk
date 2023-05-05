@@ -1,6 +1,7 @@
 package com.fly.flyapigateway;
 
 import cn.hutool.core.net.URLDecoder;
+import cn.hutool.core.util.NumberUtil;
 import com.fly.flyapiclientsdk.utils.SignUtils;
 import com.fly.flyapicommon.model.entity.InterfaceInfo;
 import com.fly.flyapicommon.model.entity.User;
@@ -18,6 +19,7 @@ import org.springframework.core.io.buffer.DataBufferFactory;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.server.PathContainer;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
@@ -40,18 +42,21 @@ import java.util.Objects;
 @Slf4j
 @Component
 public class CustomGlobalFilter implements GlobalFilter, Ordered {
-    private static final List<String> IP_WHITE_LIST = Arrays.asList("127.0.0.1", "localhost");
+    private static final List<String> IP_WHITE_LIST = Arrays.asList("127.0.0.1", "localhost","47.113.144.50");
     @DubboReference
     private InnerUserInterfaceInfoService innerUserInterfaceInfoService;
     @DubboReference
     private InnerInterfaceInfoService innerInterfaceInfoService;
     @DubboReference
-    private InnerUserService innerUserService;
+    private InnerUserService innerUserService;  //47.113.144.50
+    // 47.113.144.50
     private static final String INTERFACE_HOST = "http://localhost:8123";
+
+    private static final String GATEWAY_KEY = "gatewayKey";
+    private static final String GATEWAY_VALUE = "fly";
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        //用户发布请求到网关(√)
 
         //记录日志
         ServerHttpRequest request = exchange.getRequest();
@@ -64,12 +69,14 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
         log.info("请求来源地址" + request.getLocalAddress().getHostString());
         log.info("请求参数" + request.getQueryParams());
 
+        // todo 防止用户直接请求后台，绕过网关
+
+
         // 响应对象
         ServerHttpResponse response = exchange.getResponse();
         //黑白名单
         if (!IP_WHITE_LIST.contains(sourceAddress)) {
             response.setStatusCode(HttpStatus.FORBIDDEN);
-            System.out.println("ok1");
             return response.setComplete();
         }
 
@@ -88,7 +95,6 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
             throw new RuntimeException(e);
         }
 
-
         // todo 从数据库中查询
         User invokeUser = null;
         try {
@@ -99,14 +105,15 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
         if (invokeUser == null || invokeUser.getId() < 0) {
             return handleNoAuth(response);
         }
-        long userId = invokeUser.getId().longValue();
+        long userId = invokeUser.getId();
 /*
         if (!Objects.equals(accessKey, "fly")) {
             System.out.println("ok2");
             return handleNoAuth(response);
         }
 */
-
+        //
+        assert nonce != null;
         if (Long.parseLong(nonce) > 100000) {
             System.out.println(nonce);
             return handleNoAuth(response);
@@ -116,6 +123,11 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
         // 时间和当前时间不能超过5分钟
         long currentTimeMillis = System.currentTimeMillis() / 1000;
         final long FIVE_MINUTES = 60 * 5L;
+        // 时间戳是否为数字
+        if (!NumberUtil.isNumber(timestamp)) {
+            return handleInvokeError(exchange.getResponse());
+        }
+
         if ((currentTimeMillis - Long.parseLong(timestamp)) >= FIVE_MINUTES) {
             System.out.println("ok4");
             return handleNoAuth(response);
@@ -126,7 +138,6 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
         String secretKey = invokeUser.getSecretKey();
         String validSecret = SignUtils.getSign(body, secretKey);
         if (!Objects.equals(sign, validSecret)) {
-            System.out.println("ok5");
             return handleNoAuth(response);
         }
 

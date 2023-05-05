@@ -18,8 +18,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import javax.annotation.Resource;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
+import java.math.BigDecimal;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -188,5 +188,58 @@ class UserServiceTest {
             throw new BusinessException(ErrorCode.FORBIDDEN_ERROR, "调用次数已用尽");
         }
         System.out.println(result);
+    }
+
+
+    @Test
+    void insertCount() {
+            // 查询 userInterfaceInfo 表中所有符合条件的记录
+            List<UserInterfaceInfo> uid = userInterfaceInfoService
+                    .lambdaQuery()
+                    .eq(UserInterfaceInfo::getUserId, 6L)
+                    .list();
+
+            // 根据 interfaceInfo 的 id 列表查询 uid 中存在的记录
+            List<Long> existIdList = uid
+                    .stream()
+                    .map(UserInterfaceInfo::getInterfaceInfoId)
+                    .collect(Collectors.toList());
+
+            QueryWrapper<InterfaceInfo> interfaceInfoQueryWrapper = new QueryWrapper<>();
+            List<InterfaceInfo> interfaceInfoList = interfaceInfoService.list(interfaceInfoQueryWrapper);
+            // 将 interfaceInfo 的 id 列表转换成 Set 类型
+            Set<Long> interfaceIdSet = interfaceInfoList
+                    .stream()
+                    .map(InterfaceInfo::getId)
+                    .collect(Collectors.toSet());
+
+            // 将 existIdList 转换成 Set 类型
+            Set<Long> existIdSet = new HashSet<>(existIdList);
+            // 通过求差集的方式得到不存在在 userInterfaceInfo 表中的 interfaceInfo 的 id 列表
+            List<Long> nonExistIdList = interfaceIdSet
+                    .stream()
+                    .filter(id -> !existIdSet.contains(id))
+                    .collect(Collectors.toList());
+            // 遍历 nonExistIdList 列表，为每一个 id 创建一条 UserInterfaceInfo 记录
+            List<UserInterfaceInfo> userInterfaceInfoList = nonExistIdList.stream().map(id -> {
+                UserInterfaceInfo userInterfaceInfo = new UserInterfaceInfo();
+                userInterfaceInfo.setInterfaceInfoId(id);
+                userInterfaceInfo.setUserId(6L);
+                userInterfaceInfo.setLeftNum(20);
+                userInterfaceInfo.setTotalNum(0);
+                return userInterfaceInfo;
+            }).collect(Collectors.toList());
+            // 将创建的所有 UserInterfaceInfo 记录批量保存到 userInterfaceInfo 表中
+            userInterfaceInfoService.saveBatch(userInterfaceInfoList);
+    }
+
+
+    @Test
+    void sum() {
+        QueryWrapper<UserInterfaceInfo> queryWrapper =new QueryWrapper<>();
+        queryWrapper.select("sum(totalNum) as sumAll");
+        Map<String,Object> map = userInterfaceInfoService.getMap(queryWrapper);
+        BigDecimal sumAll = (BigDecimal) map.get("sumAll");
+        System.out.println(sumAll);
     }
 }

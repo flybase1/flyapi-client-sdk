@@ -12,8 +12,10 @@ import com.fly.project.exception.BusinessException;
 import com.fly.project.model.dto.user.*;
 import com.fly.project.model.vo.UserVO;
 import com.fly.project.service.UserService;
+import com.fly.project.utils.RedisConstants;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -27,12 +29,14 @@ import java.util.stream.Collectors;
  * @author yupi
  */
 @RestController
-@RequestMapping("/user")
+@RequestMapping( "/user" )
 public class UserController {
 
     @Resource
     private UserService userService;
 
+    @Resource
+    private RedisTemplate<String, Object> redisTemplate;
     // region 登录相关
 
     /**
@@ -41,7 +45,7 @@ public class UserController {
      * @param userRegisterRequest
      * @return
      */
-    @PostMapping("/register")
+    @PostMapping( "/register" )
     public BaseResponse<Long> userRegister(@RequestBody UserRegisterRequest userRegisterRequest) {
         if (userRegisterRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -64,7 +68,7 @@ public class UserController {
      * @param request
      * @return
      */
-    @PostMapping("/login")
+    @PostMapping( "/login" )
     public BaseResponse<User> userLogin(@RequestBody UserLoginRequest userLoginRequest, HttpServletRequest request) {
         if (userLoginRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -84,7 +88,7 @@ public class UserController {
      * @param request
      * @return
      */
-    @PostMapping("/logout")
+    @PostMapping( "/logout" )
     public BaseResponse<Boolean> userLogout(HttpServletRequest request) {
         if (request == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -99,7 +103,7 @@ public class UserController {
      * @param request
      * @return
      */
-    @GetMapping("/get/login")
+    @GetMapping( "/get/login" )
     public BaseResponse<UserVO> getLoginUser(HttpServletRequest request) {
         User user = userService.getLoginUser(request);
         UserVO userVO = new UserVO();
@@ -118,7 +122,7 @@ public class UserController {
      * @param request
      * @return
      */
-    @PostMapping("/add")
+    @PostMapping( "/add" )
     public BaseResponse<Long> addUser(@RequestBody UserAddRequest userAddRequest, HttpServletRequest request) {
         if (userAddRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -139,7 +143,7 @@ public class UserController {
      * @param request
      * @return
      */
-    @PostMapping("/delete")
+    @PostMapping( "/delete" )
     public BaseResponse<Boolean> deleteUser(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -155,7 +159,7 @@ public class UserController {
      * @param request
      * @return
      */
-    @PostMapping("/update")
+    @PostMapping( "/update" )
     public BaseResponse<Boolean> updateUser(@RequestBody UserUpdateRequest userUpdateRequest, HttpServletRequest request) {
         if (userUpdateRequest == null || userUpdateRequest.getId() == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -173,7 +177,7 @@ public class UserController {
      * @param request
      * @return
      */
-    @GetMapping("/get")
+    @GetMapping( "/get" )
     public BaseResponse<UserVO> getUserById(int id, HttpServletRequest request) {
         if (id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -191,7 +195,7 @@ public class UserController {
      * @param request
      * @return
      */
-    @GetMapping("/list")
+    @GetMapping( "/list" )
     public BaseResponse<List<UserVO>> listUser(UserQueryRequest userQueryRequest, HttpServletRequest request) {
         User userQuery = new User();
         if (userQueryRequest != null) {
@@ -214,7 +218,7 @@ public class UserController {
      * @param request
      * @return
      */
-    @GetMapping("/list/page")
+    @GetMapping( "/list/page" )
     public BaseResponse<Page<UserVO>> listUserByPage(UserQueryRequest userQueryRequest, HttpServletRequest request) {
         long current = 1;
         long size = 10;
@@ -224,6 +228,18 @@ public class UserController {
             current = userQueryRequest.getCurrent();
             size = userQueryRequest.getPageSize();
         }
+
+        //todo 存入redis
+/*
+        String userKey = RedisConstants.LIST_USERS_KEY+userQuery.getId();
+        Page<UserVO> userVORedis = (Page<UserVO>) redisTemplate.opsForValue().get(userKey);
+        // 判断是否有缓存，有就直接读缓存
+        if (userVORedis!=null){
+            return ResultUtils.success(userVORedis);
+        }
+
+*/
+
         QueryWrapper<User> queryWrapper = new QueryWrapper<>(userQuery);
         Page<User> userPage = userService.page(new Page<>(current, size), queryWrapper);
         Page<UserVO> userVOPage = new PageDTO<>(userPage.getCurrent(), userPage.getSize(), userPage.getTotal());
@@ -233,13 +249,17 @@ public class UserController {
             return userVO;
         }).collect(Collectors.toList());
         userVOPage.setRecords(userVOList);
+
+        // 无缓存，读数据库
+/*        redisTemplate.opsForValue().set(userKey,userVOPage,RedisConstants.LIST_USER_TIME);*/
+
         return ResultUtils.success(userVOPage);
     }
 
     // endregion
 
 
-    @PostMapping("/forgetPassword")
+    @PostMapping( "/forgetPassword" )
     public BaseResponse<Boolean> forgetPassword(@RequestBody UserRegisterRequest userRegisterRequest) {
         if (userRegisterRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -253,8 +273,8 @@ public class UserController {
         }
 
         boolean success = userService.canForgetPassword(userAccount, userPassword, checkPassword);
-        if (!success){
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR,"修改失败");
+        if (!success) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "修改失败");
         }
 
         return ResultUtils.success(success);

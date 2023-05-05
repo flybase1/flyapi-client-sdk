@@ -16,6 +16,9 @@ import com.fly.project.model.vo.UserVO;
 import com.fly.project.service.UserInterfaceInfoService;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.util.Map;
+
 /**
  * @author admin
  * @description 针对表【user_interface_info(用户调用接口关系表)】的数据库操作Service实现
@@ -44,6 +47,12 @@ public class UserInterfaceInfoServiceImpl extends ServiceImpl<UserInterfaceInfoM
 
     }
 
+    /**
+     * 根据调用次数改变数据库的值
+     * @param interfaceInfoId
+     * @param userId
+     * @return
+     */
     @Override
     public boolean invokeCount(long interfaceInfoId, long userId) {
         //todo 加上锁
@@ -51,19 +60,28 @@ public class UserInterfaceInfoServiceImpl extends ServiceImpl<UserInterfaceInfoM
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         UpdateWrapper<UserInterfaceInfo> updateWrapper = new UpdateWrapper<>();
-        updateWrapper.eq("interfaceInfoId", interfaceInfoId);
-        updateWrapper.eq("userId", userId);
-        updateWrapper.setSql("leftNum = leftNum-1,totalNum=totalNum+1");
-        updateWrapper.gt("leftNum", 0);
-        boolean isUpdate = this.update(updateWrapper);
+
+        boolean isUpdate;
+
+        // 添加锁防止用户点击次数过高，出现问题
+        synchronized (this) {
+            updateWrapper.eq("interfaceInfoId", interfaceInfoId);
+            updateWrapper.eq("userId", userId);
+            updateWrapper.setSql("leftNum = leftNum-1,totalNum=totalNum+1");
+            updateWrapper.gt("leftNum", 0);
+            isUpdate = this.update(updateWrapper);
+        }
         return isUpdate;
     }
 
-    /** todo
+
+    /**
+     * todo
      * 计算当前用户当前接口剩余使用次数
+     *
      * @param interfaceInfoId 接口id
-     * @param userId 用户id
-     * @return  返回剩余次数
+     * @param userId          用户id
+     * @return 返回剩余次数
      */
     @Override
     public Integer getUserIntegerCount(long interfaceInfoId, long userId) {
@@ -75,6 +93,16 @@ public class UserInterfaceInfoServiceImpl extends ServiceImpl<UserInterfaceInfoM
         queryWrapper.eq("userId", userId);
         UserInterfaceInfo userInterfaceInfo = getOne(queryWrapper);
         return userInterfaceInfo.getLeftNum();
+    }
+
+    @Override
+    public BigDecimal getAllInvokeCount() {
+        // select sum(totalNum) from user_interface_info;
+        QueryWrapper<UserInterfaceInfo> queryWrapper =new QueryWrapper<>();
+        queryWrapper.select("sum(totalNum) as sumAll");
+        Map<String,Object> map = this.getMap(queryWrapper);
+        BigDecimal sumAll = (BigDecimal) map.get("sumAll");
+        return sumAll;
     }
 
 

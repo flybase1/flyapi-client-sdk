@@ -40,3 +40,4 @@ dubbo:
     port: -1
   registry:
     address: nacos://localhost:8848
+#    内网地址
